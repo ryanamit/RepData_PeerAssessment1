@@ -1,25 +1,100 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+author: "amit"
+date: "6/27/2020"
+output: html_document
 ---
+## mean total number of steps taken per day
+LOading the data
+```{r,echo=TRUE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE,message=FALSE, warning=FALSE)
+library(tidyr)
+library(dplyr)
+library(data.table)
+library(ggplot2)
+library(ggrepel)
+library(lubridate)
 
+activity <- read.csv("activity.csv")
+```
+Calculate the total number of steps taken per day
+```{r}
+activity$date <- ymd(as.character(activity$date))
+activity$HMS <- hms(paste(activity$interval%/%100,":",activity$interval-(activity$interval%/%100)*100,":",0))
+step_by_day <- aggregate(steps~date  ,data= activity,FUN="sum")
+knitr::kable(summary(step_by_day))
+```
+histogram of the total number of steps taken each day
+```{r}
+ggplot(step_by_day,aes(date))+geom_histogram(aes(steps),bins = 30)
+```
+mean and median of the total number of steps taken per day
+```{r}
+mean(step_by_day$steps)
+median(step_by_day$steps)
+```
+##average daily activity pattern
+time series plot  of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+```{r}
+average_step_by_5mn <- aggregate(steps ~ interval ,data= activity,FUN="mean")
+ggplot(average_step_by_5mn,aes(x = interval/100,y= steps))+geom_line()+
+  labs (title= "Average number of step by 5mn interval", x="5mn interval (in hour)")
+```
 
-## Loading and preprocessing the data
+5-minute interval, on average across all the days in the dataset, contains the maximum number of steps
+```{r}
+max_average_number_of_steps <- average_step_by_5mn[which(average_step_by_5mn$steps == max(average_step_by_5mn$steps, na.rm = TRUE)), ]
+max_average_number_of_steps
+```
+##max_average_number_of_steps
+ total number of missing values in the dataset
 
+```{r}
+total_rows_with_NAs <-  nrow(activity)-sum(complete.cases(activity))
+```
+All missing values in the dataset will be replaced by the mean of the corresponding 5-minutes interval
+```{r}
+activity$modify<- is.na(activity$steps)
+activity <-merge(activity,average_step_by_5mn,by = "interval" )
+activity$steps.x[activity$modify] <- activity$steps.y[activity$modify]
+```
+Create a new dataset that is equal to the original dataset but with the missing data filled in.
+```{r}
+activity_new<- data.frame(interval=activity$interval,steps = activity$steps.x,date=as.Date(activity$date))
+knitr::kable(summary(activity_new))
+```
 
+```{r}
+knitr::kable(head(activity_new))
+```
+ histogram of the total number of steps taken each day
 
-## What is mean total number of steps taken per day?
+```{r}
+total_step_by_day <- aggregate(steps ~ date ,data= activity_new,FUN="sum")
+ggplot(total_step_by_day,aes(date))+geom_histogram(aes(steps),bins = 30)
+```
 
-
-
-## What is the average daily activity pattern?
-
-
-
-## Imputing missing values
-
-
-
-## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+mean_before_correction <- mean(step_by_day$steps)
+mean_after_correction <-mean(total_step_by_day$steps)
+median_before_correction <- median(step_by_day$steps)
+median_after_correction <- median(total_step_by_day$steps)
+```
+##differences in activity patterns between weekdays and weekends
+new factor variable in the dataset with two levels – “weekday” and “weekend” indicating whether a given date is a weekday or weekend day.
+```{r}
+week_days <- c("lundi","mardi","mercredi","jeudi","vendredi")
+weekend_days <- c("samedi","dimanche")
+day_type <- weekdays(activity_new$date) %in% week_days
+activity_new$day_type[day_type]= "weekday" 
+activity_new$day_type[!(day_type)]= "weekend"
+activity_new$day_type <- as.factor(activity_new$day_type)
+knitr::kable(head(activity_new))
+```
+panel plot containing a time series plot (i.e. type = “l”) of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis).
+```{r}
+average_step_by_5mn_daytype <- aggregate(steps ~ interval + day_type ,data= activity_new,FUN=mean)
+ggplot(data = average_step_by_5mn_daytype, aes(x= interval/100, y = steps))+geom_line()+facet_grid(day_type~.)+
+  labs (title= "Average number of step by interval and day type", x="5mn interval (in hour)")
+```
